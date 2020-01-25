@@ -1,7 +1,7 @@
 # Cyclical Learning Rate (CLR)
 ![Alt text](images/triangularDiag.png?raw=true "Title")
 
-This repository includes a Keras callback to be used in training that allows implementation of cyclical learning rate policies, as detailed in Leslie Smith's paper [Cyclical Learning Rates for Training Neural Networks
+This repository includes a Fastai callback to be used in training that allows implementation of cyclical learning rate policies, as detailed in Leslie Smith's paper [Cyclical Learning Rates for Training Neural Networks
 arXiv:1506.01186v4](https://arxiv.org/abs/1506.01186 "Title").
 
 A cyclical learning rate is a policy of learning rate adjustment that increases the learning rate off a base value in a cyclical nature. Typically the frequency of the cycle is constant, but the amplitude is often scaled dynamically at either each cycle or each mini-batch iteration.
@@ -67,9 +67,9 @@ lr = base_lr + (max_lr-base_lr)*np.maximum(0, (1-x))
 
 Default triangular clr policy example:
 ```python
-    clr = CyclicLR(base_lr=0.001, max_lr=0.006,
-                        step_size=2000.)
-    model.fit(X_train, Y_train, callbacks=[clr])
+    clr = CircularLRScheduler(learn, mode='triangular', 
+                                      base_lr=0.001, max_lr=0.003, step_size=42)
+    learn.fit(3, callbacks=[clr])
 ``` 
 
 Results:
@@ -93,9 +93,9 @@ lr = base_lr + (max_lr-base_lr)*np.maximum(0, (1-x))/float(2**(cycle-1))
 Default triangular clr policy example:
 
 ```python
-    clr = CyclicLR(base_lr=0.001, max_lr=0.006,
-                        step_size=2000., mode='triangular2')
-    model.fit(X_train, Y_train, callbacks=[clr])
+    clr = CircularLRScheduler(learn, mode='triangular2', 
+                                      base_lr=0.001, max_lr=0.003, step_size=42)
+    learn.fit(3, callbacks=[clr])
 ``` 
 
 Results:
@@ -119,10 +119,11 @@ lr= base_lr + (max_lr-base_lr)*np.maximum(0, (1-x))*gamma**(iterations)
 Default triangular clr policy example:
 
 ```python
-    clr = CyclicLR(base_lr=0.001, max_lr=0.006,
-                        step_size=2000., mode='exp_range',
-                        gamma=0.99994)
-    model.fit(X_train, Y_train, callbacks=[clr])
+    clr = CircularLRScheduler(learn, mode='exp_range', 
+                                    base_lr=0.001, max_lr=0.003, 
+                                    step_size=42,
+                                    gamma=0.99994)
+    learn.fit(3, callbacks=[clr])
 ``` 
 
 Results:
@@ -144,10 +145,11 @@ lr= base_lr + (max_lr-base_lr)*np.maximum(0, (1-x))*0.5*(1+np.sin(cycle*np.pi/2.
 Default custom cycle-policy example:
 ```python
     clr_fn = lambda x: 0.5*(1+np.sin(x*np.pi/2.))
-    clr = CyclicLR(base_lr=0.001, max_lr=0.006,
-                        step_size=2000., scale_fn=clr_fn,
-                        scale_mode='cycle')
-    model.fit(X_train, Y_train, callbacks=[clr])
+    clr = CircularLRScheduler(learn,base_lr=0.001, max_lr=0.003, 
+                                    step_size=42,
+                                    scale_fn=clr_fn,
+                                    scale_mode='cycle'
+    learn.fit(3, callbacks=[clr])
 ``` 
 
 Results:
@@ -169,10 +171,11 @@ lr= base_lr + (max_lr-base_lr)*np.maximum(0, (1-x))*1/(5**(iterations*0.0001))
 Default custom cycle-policy example:
 ```python
     clr_fn = lambda x: 1/(5**(x*0.0001))
-    clr = CyclicLR(base_lr=0.001, max_lr=0.006,
-                        step_size=2000., scale_fn=clr_fn,
-                        scale_mode='iterations')
-    model.fit(X_train, Y_train, callbacks=[clr])
+    clr = CircularLRScheduler(learn,base_lr=0.001, max_lr=0.003, 
+                                    step_size=42,
+                                    scale_fn=clr_fn,
+                                    scale_mode='iterations'
+    learn.fit(3, callbacks=[clr])
 ``` 
 
 Results:
@@ -204,16 +207,6 @@ clr._reset()
 
 simply resets the original cycle.
 
-## History
-
-`CyclicLR()` keeps track of learning rates, loss, metrics and more in the `history` attribute dict. This generated many of the plots above.
-
-Note: iterations in the history is the running training iterations; it is distinct from the cycle iterations and does not reset. This allows you to plot your learning rates over training iterations, even after you change/reset the cycle.
-
-Example:
-
-![Alt text](images/reset.png?raw=true "Title")
-
 ## Choosing a suitable base_lr/max_lr (LR Range Test)
 <img src="images/lrtest.png" width="500" height="300" />
 
@@ -222,16 +215,6 @@ The author offers a simple approach to determining the boundaries of your cycle 
 An LR range test can be done using the `triangular` policy; simply set `base_lr` and `max_lr` to define the entire range you wish to test over, and set `step_size` to be the total number of iterations in the number of epochs you wish to test on. This linearly increases the learning rate at each iteration over the range desired.
 
 The author suggests choosing `base_lr` and `max_lr` by plotting accuracy vs. learning rate. Choose `base_lr` to be the learning rate where accuracy starts to increase, and choose `max_lr` to be the learning rate where accuracy starts to slow, oscillate, or fall (the elbow). In the example above, Smith chose 0.001 and 0.006 as `base_lr` and `max_lr` respectively.
-
-### Plotting Accuracy vs. Learning Rate
-In order to plot accuracy vs learning rate, you can use the `.history` attribute to get the learning rates and accuracy at each iteration.
-
-```python
-model.fit(X, Y, callbacks=[clr])
-h = clr.history
-lr = h['lr']
-acc = h['acc']
-```
 
 ## Order of learning rate augmentation
 Note that the clr callback updates the learning rate prior to any further learning rate adjustments as called for in a given optimizer.

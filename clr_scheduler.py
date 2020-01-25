@@ -1,6 +1,7 @@
-from keras.callbacks import *
+from fastai.basic_train import *
+import numpy as np
 
-class CyclicLR(Callback):
+class CircularLRScheduler(LearnerCallback):
     """This callback implements a cyclical learning rate policy (CLR).
     The method cycles the learning rate between two boundaries with
     some constant frequency, as detailed in this paper (https://arxiv.org/abs/1506.01186).
@@ -18,18 +19,20 @@ class CyclicLR(Callback):
     
     # Example
         ```python
-            clr = CyclicLR(base_lr=0.001, max_lr=0.006,
-                                step_size=2000., mode='triangular')
-            model.fit(X_train, Y_train, callbacks=[clr])
+            clr = CircularLRScheduler(learn, mode='triangular', 
+                                      base_lr=0.001, max_lr=0.003, step_size=42)
+            learn.fit(3, callbacks=[clr])
         ```
     
     Class also supports custom scaling functions:
         ```python
             clr_fn = lambda x: 0.5*(1+np.sin(x*np.pi/2.))
-            clr = CyclicLR(base_lr=0.001, max_lr=0.006,
-                                step_size=2000., scale_fn=clr_fn,
-                                scale_mode='cycle')
-            model.fit(X_train, Y_train, callbacks=[clr])
+            clr = CircularLRScheduler(learn, mode='triangular', 
+                                      base_lr=0.001, max_lr=0.003,
+                                      scale_fn=clr_fn, 
+                                      step_size=42)
+
+            learn.fit(3, callbacks=[clr])
         ```    
     # Arguments
         base_lr: initial learning rate which is the
@@ -59,10 +62,9 @@ class CyclicLR(Callback):
             iterations since start of cycle). Default is 'cycle'.
     """
 
-    def __init__(self, base_lr=0.001, max_lr=0.006, step_size=2000., mode='triangular',
+    def __init__(self, learn:Learner,base_lr=0.001, max_lr=0.003, step_size=42., mode='triangular',
                  gamma=1., scale_fn=None, scale_mode='cycle'):
-        super(CyclicLR, self).__init__()
-
+        super().__init__(learn)
         self.base_lr = base_lr
         self.max_lr = max_lr
         self.step_size = step_size
@@ -83,7 +85,6 @@ class CyclicLR(Callback):
             self.scale_mode = scale_mode
         self.clr_iterations = 0.
         self.trn_iterations = 0.
-        self.history = {}
 
         self._reset()
 
@@ -99,7 +100,13 @@ class CyclicLR(Callback):
         if new_step_size != None:
             self.step_size = new_step_size
         self.clr_iterations = 0.
-        
+
+    def on_train_begin(self, **kwargs)->None:
+        if self.clr_iterations == 0:
+            self.learn.opt.lr = self.base_lr
+        else:
+            self.learn.opt.lr = self.clr()
+
     def clr(self):
         cycle = np.floor(1+self.clr_iterations/(2*self.step_size))
         x = np.abs(self.clr_iterations/self.step_size - 2*cycle + 1)
@@ -107,25 +114,11 @@ class CyclicLR(Callback):
             return self.base_lr + (self.max_lr-self.base_lr)*np.maximum(0, (1-x))*self.scale_fn(cycle)
         else:
             return self.base_lr + (self.max_lr-self.base_lr)*np.maximum(0, (1-x))*self.scale_fn(self.clr_iterations)
-        
-    def on_train_begin(self, logs={}):
-        logs = logs or {}
+    
 
-        if self.clr_iterations == 0:
-            K.set_value(self.model.optimizer.lr, self.base_lr)
-        else:
-            K.set_value(self.model.optimizer.lr, self.clr())        
-            
-    def on_batch_end(self, epoch, logs=None):
+    def on_batch_end(self, train, **kwargs)->None:
+        if train:
+            self.trn_iterations += 1
+            self.clr_iterations += 1
         
-        logs = logs or {}
-        self.trn_iterations += 1
-        self.clr_iterations += 1
-
-        self.history.setdefault('lr', []).append(K.get_value(self.model.optimizer.lr))
-        self.history.setdefault('iterations', []).append(self.trn_iterations)
-
-        for k, v in logs.items():
-            self.history.setdefault(k, []).append(v)
-        
-        K.set_value(self.model.optimizer.lr, self.clr())
+            self.learn.opt.lr = self.clr()
